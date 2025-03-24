@@ -38,6 +38,8 @@ typedef struct
     size_t samples_to_read;
     int force_fpga_prog;
     int write_metadata;
+    float bandwidth;
+    float sample_rate;
     
     // State
     int sample_infinite;
@@ -96,6 +98,8 @@ static void init_program_state(void)
     state.samples_to_read = 1024*1024/8;
     state.force_fpga_prog = 0;
     state.write_metadata = 0;
+    state.sample_rate = 0;
+    state.bandwidth = 0;
     
     // state
     state.sample_infinite = 1;
@@ -111,10 +115,14 @@ static void init_program_state(void)
 //=======================================================================
 static void usage(void)
 {
+    /* TODO: Update Defaults */
+
 	fprintf(stderr,
 		"CaribouLite I/Q recorder\n\n"
 		"Usage:\t-c the RX channel to use (0: low, 1: high)\n"
         "\t-f frequency [Hz]\n"
+        "\t[-b bandwidth (default: ??)]\n"
+        "\t[-r sample rate (default: ??)]\n"
 		"\t[-g gain (default: -1 for agc)]\n"
 		"\t[-p ppm_error (default: 0)]\n"
 		"\t[-n number of samples to read (default: 0, infinite)]\n"
@@ -175,6 +183,20 @@ static int check_inputs(void)
         return -1;
     }
     
+    // 160 khz (1.6e5) <-> 2000 khz (2.0e6)
+    if((state.bandwidth < 1.6e5 || state.bandwidth > 2.0e6))
+    {
+        ZF_LOGE("Rx channel bandwidth: %.0f is incompatible (legal range: [%.0f .. %.0f] dB", state.bandwidth, 1.6e5, 2.0e6 );
+        return -1;
+    }
+
+    // 400 khz (4.0e5) <-> 4000 khz (4.0e6)
+    if((state.sample_rate < 4.0e5 || state.sample_rate > 4.0e6))
+    {
+        ZF_LOGE("Rx channel sample rate: %.0f is incompatible (legal range: [%.0f .. %.0f] dB", state.bandwidth, 4.0e5, 4.0e6 );
+        return -1;
+    }
+
     return 0;
 }
 
@@ -182,12 +204,20 @@ static int check_inputs(void)
 int analyze_arguments(int argc, char *argv[])
 {
     int opt;
-    while ((opt = getopt(argc, argv, "c:f:g:n:S:F")) != -1) {
+    while ((opt = getopt(argc, argv, "b:r:c:f:g:n:S:F")) != -1) {
 		switch (opt) {
 		case 'c':
 			state.rx_channel = (int)atoi(optarg);
             printf("DBG: RX Channel = %d\n", state.rx_channel);
 			break;
+        case 'b':
+			state.bandwidth = (int)atoi(optarg);
+            printf("DBG: Bandwidth = %.1f\n", state.bandwidth);
+			break;
+        case 'r':
+			state.sample_rate = (int)atoi(optarg);
+            printf("DBG: Sample Rate = %.1f\n", state.sample_rate);
+			break;            
 		case 'f':
 			state.frequency = atof(optarg);
             printf("DBG: Frequency = %.1f Hz\n", state.frequency);
@@ -316,6 +346,16 @@ int main(int argc, char *argv[])
     //-------------------------------------    
     // Set radio parameters
     cariboulite_radio_set_frequency(state.radio, true, &state.frequency);
+    
+    if( state.bandwidth != 0 )
+    {
+        cariboulite_radio_set_rx_bandwidth_flt( state.radio, state.bandwidth );
+    }
+
+    if( state.sample_rate != 0 )
+    {
+        cariboulite_radio_set_rx_sample_rate_flt( state.radio, state.sample_rate );
+    }
     cariboulite_radio_set_rx_gain_control(state.radio, state.gain == -1.0, state.gain);
     cariboulite_radio_sync_information(state.radio);
     cariboulite_radio_activate_channel(state.radio, cariboulite_channel_dir_rx, true);
@@ -366,3 +406,4 @@ int main(int argc, char *argv[])
     cariboulite_close();
     return 0;
 }
+
