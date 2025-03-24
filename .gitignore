@@ -54,3 +54,7 @@ dkms.conf
 # build directories
 installations
 build
+
+# cariboulite specific
+software/utils/generate_bin_blob
+software/libcariboulite/src/caribou_smi/kernel/smi_stream_dev_gen.h
